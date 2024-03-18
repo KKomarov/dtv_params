@@ -15,7 +15,7 @@
 
 static struct timer_list s_gpio_check_timer;
 static int s_gpio_check_timer_inited = 0;
-static struct pinctrl * s_pinctrl = 0, s_pinctrl_ao = 0;
+static struct pinctrl *s_pinctrl = NULL, *s_pinctrl_ao = NULL;
 
 typedef struct
 {
@@ -79,7 +79,7 @@ PinState pin_map[] = {
         .mode = 0,
     },
 };
-#define DEF_PIN(i_, name_) static PinState* name_ = pin_map[i_];
+#define DEF_PIN(i_, name_) static PinState* name_ = &pin_map[i_];
 DEF_PIN(0, ant_overload_1_pin);
 DEF_PIN(1, ant_power_1_pin);
 DEF_PIN(2, ant_overload_2_pin);
@@ -93,15 +93,15 @@ DEF_PIN(9, user_defined_2_pin);
 DEF_PIN(10, power_led_pin);
 DEF_PIN(11, standby_led_pin);
 
-int update_value(PinState *pin_state)
+void update_value(PinState *pin_state)
 {
-    return gpiod_set_raw_value(gpio_to_desc(pin_state->pin), pin_state->value);
+    gpiod_set_raw_value(gpio_to_desc(pin_state->pin), pin_state->value);
 }
 
-int set_value(PinState *pin_state, int val)
+void set_value(PinState *pin_state, int val)
 {
     pin_state->value = val;
-    return gpiod_set_raw_value(gpio_to_desc(pin_state->pin), val);
+    gpiod_set_raw_value(gpio_to_desc(pin_state->pin), val);
 }
 
 int read_value(PinState *pin_state)
@@ -111,19 +111,20 @@ int read_value(PinState *pin_state)
     return val;
 }
 
-int ant_overload_check(int ant_num)
+void ant_overload_check(int ant_num)
 {
     PinState *ant_sense = &pin_map[ant_num * 2];
     PinState *ant_power = &pin_map[ant_num * 2 + 1];
     if (!(ant_sense->enabled && ant_power->enabled))
-        return ant_num;
+        return;
 
     int ant_overload_val = read_value(ant_sense);
     if (!ant_overload_val)
     {
         // overload detected -> switch off ant_power
         ant_sense->value = 1;
-        return set_value(ant_power, 0);
+        set_value(ant_power, 0);
+        return;
     }
 
     static last_power_val[2];
@@ -132,10 +133,10 @@ int ant_overload_check(int ant_num)
         update_value(ant_power);
         last_power_val[i] = ant_power->value;
     }
-    return ant_num;
+    return;
 }
 
-unsigned long gpio_check_timer_sr(void)
+void gpio_check_timer_sr(unsigned long arg)
 {
     ant_overload_check(0);
     ant_overload_check(1);
@@ -296,7 +297,7 @@ static int dtv_params_probe(struct platform_device *pdev)
         {
             cur->enabled = 1;
             if (cur->mode)
-                gpiod_direction_output_raw(gpio_to_desc(cur->pin), cur->val);
+                gpiod_direction_output_raw(gpio_to_desc(cur->pin), cur->value);
             else
                 gpiod_direction_input(gpio_to_desc(cur->pin));
         }
@@ -323,7 +324,7 @@ static int dtv_params_probe(struct platform_device *pdev)
 
     if (s_gpio_check_timer_inited)
     {
-        init_timer_key(&s_gpio_check_timer, 0, 0);
+        init_timer(&s_gpio_check_timer);
         s_gpio_check_timer.function = gpio_check_timer_sr;
         s_gpio_check_timer.data = 0;
         mod_timer(&s_gpio_check_timer, jiffies + 125);
@@ -342,12 +343,12 @@ static int dtv_params_remove(struct platform_device *pdev)
     if (s_pinctrl)
     {
         devm_pinctrl_put(s_pinctrl);
-        s_pinctrl = 0;
+        s_pinctrl = NULL;
     }
     if (s_pinctrl_ao)
     {
         devm_pinctrl_put(s_pinctrl_ao);
-        s_pinctrl_ao = 0;
+        s_pinctrl_ao = NULL;
     }
     return 0;
 }
@@ -388,13 +389,13 @@ static struct platform_driver dtv_params_driver = {
 int dtv_params_init(void)
 {
     pr_info("init");
-    return _platform_driver_register(&dtv_params_driver, 0);
+    return platform_driver_register(&dtv_params_driver);
 }
 
-int dtv_params_exit(void)
+void dtv_params_exit(void)
 {
     pr_info("exit");
-    return platform_driver_unregister(&dtv_params_driver);
+    platform_driver_unregister(&dtv_params_driver);
 }
 
 module_init(dtv_params_init);
