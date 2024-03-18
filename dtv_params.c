@@ -285,7 +285,7 @@ static int dtv_params_probe(struct platform_device *pdev)
         return 0;
     }
 
-    for (int i = 0; i < sizeof(pin_map); ++i)
+    for (int i = 0; i < sizeof(pin_map) / sizeof(PinState); ++i)
     {
         PinState *cur = &pin_map[i];
         char name[32];
@@ -353,7 +353,7 @@ static int dtv_params_remove(struct platform_device *pdev)
 
 void dtv_shutdown(struct platform_device *pdev)
 {
-    return 0;
+    return;
 }
 
 static int dtv_suspend(struct platform_device *pdev, pm_message_t state)
