@@ -79,7 +79,7 @@ PinState pin_map[] = {
         .mode = 0,
     },
 };
-#define DEF_PIN(i_, name_) static PinState name_ = pin_map[i_];
+#define DEF_PIN(i_, name_) static PinState* name_ = pin_map[i_];
 DEF_PIN(0, ant_overload_1_pin);
 DEF_PIN(1, ant_power_1_pin);
 DEF_PIN(2, ant_overload_2_pin);
