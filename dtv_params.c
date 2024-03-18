@@ -8,20 +8,22 @@
 #include <linux/version.h>
 #include <linux/amlogic/aml_gpio_consumer.h>
 #include <linux/platform_device.h>
+#include <linux/timer.h>
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt "\n"
 
-static timer_list s_gpio_check_timer;
-static int s_gpio_check_timer_inited = 0, s_pinctrl = 0, s_pinctrl_ao = 0;
+static struct timer_list s_gpio_check_timer;
+static int s_gpio_check_timer_inited = 0;
+static struct pinctrl * s_pinctrl = 0, s_pinctrl_ao = 0;
 
-struct PinState
+typedef struct
 {
     char *name;
     int mode;
     int pin;
     int enabled;
     int value;
-};
+} PinState;
 
 // mode 0-output, 1-input
 PinState pin_map[] = {
@@ -76,7 +78,7 @@ PinState pin_map[] = {
         .mode = 0,
     },
 };
-#define DEF_PIN(i_, name_) static auto name_ = pin_map[i];
+#define DEF_PIN(i_, name_) static auto name_ = pin_map[i_];
 DEF_PIN(0, ant_overload_1_pin);
 DEF_PIN(1, ant_power_1_pin);
 DEF_PIN(2, ant_overload_2_pin);
@@ -104,7 +106,7 @@ int set_value(struct PinState *pin_state, int val)
 int read_value(struct PinState *pin_state)
 {
     int val = gpiod_get_raw_value(gpio_to_desc(pin_state->pin));
-    pin_state->val = val;
+    pin_state->value = val;
     return val;
 }
 
@@ -129,13 +131,14 @@ int ant_overload_check(int ant_num)
         update_value(ant_power);
         last_power_val[i] = ant_power->value;
     }
+    return ant_num;
 }
 
-unsigned long gpio_check_timer_sr()
+unsigned long gpio_check_timer_sr(void)
 {
     ant_overload_check(0);
     ant_overload_check(1);
-    return mod_timer(s_gpio_check_timer, jiffies + 125);
+    return mod_timer(&s_gpio_check_timer, jiffies + 125);
 }
 
 static ssize_t read_from_pin(struct PinState *pin_state, struct class_attribute *attr, char *buf)
@@ -244,14 +247,14 @@ static struct class dtv_params_class = {
     .class_attrs = dtv_params_class_attrs,
 };
 
-auto init_gpio(struct device *dev, const char *name)
+struct pinctrl * init_gpio(struct device *dev, const char *name)
 {
-    auto p_handle = devm_pinctrl_get(p_dev);
-    auto p_res = p_handle;
+    struct pinctrl * p_handle = devm_pinctrl_get(dev);
+    struct pinctrl * p_res = p_handle;
     if (p_handle <= 0xFFFFF000)
     {
-        auto state_handle = pinctrl_lookup_state(p_handle, name);
-        auto prev_state_handle = p_res;
+        struct pinctrl_state * state_handle = pinctrl_lookup_state(p_handle, name);
+        struct pinctrl_state * prev_state_handle = p_res;
         if (state_handle > 0xFFFFF000)
         {
             p_res = state_handle;
@@ -285,8 +288,9 @@ static int dtv_params_probe(struct platform_device *pdev)
     {
         PinState *cur = &pin_map[i];
         char name[32];
+        int flags;
         snprintf(name, sizeof(name), "%s-gpio", cur->name);
-        cur->pin = of_get_named_gpio_flags(of_node, name, 0);
+        cur->pin = of_get_named_gpio_flags(of_node, name, 0, &flags);
         if (cur->pin < 0x200)
         {
             cur->enabled = 1;
@@ -380,13 +384,13 @@ static struct platform_driver dtv_params_driver = {
         .of_match_table = dtv_params_dt_match,
     }};
 
-int dtv_params_init()
+int dtv_params_init(void)
 {
     pr_info("init");
     return _platform_driver_register(&dtv_params_driver, 0);
 }
 
-int dtv_params_exit()
+int dtv_params_exit(void)
 {
     pr_info("exit");
     return platform_driver_unregister(&dtv_params_driver);
