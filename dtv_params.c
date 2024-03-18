@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <linux/timer.h>
 
+#undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt "\n"
 
 static struct timer_list s_gpio_check_timer;
@@ -78,7 +79,7 @@ PinState pin_map[] = {
         .mode = 0,
     },
 };
-#define DEF_PIN(i_, name_) static auto name_ = pin_map[i_];
+#define DEF_PIN(i_, name_) static PinState name_ = pin_map[i_];
 DEF_PIN(0, ant_overload_1_pin);
 DEF_PIN(1, ant_power_1_pin);
 DEF_PIN(2, ant_overload_2_pin);
@@ -92,18 +93,18 @@ DEF_PIN(9, user_defined_2_pin);
 DEF_PIN(10, power_led_pin);
 DEF_PIN(11, standby_led_pin);
 
-int update_value(struct PinState *pin_state)
+int update_value(PinState *pin_state)
 {
     return gpiod_set_raw_value(gpio_to_desc(pin_state->pin), pin_state->value);
 }
 
-int set_value(struct PinState *pin_state, int val)
+int set_value(PinState *pin_state, int val)
 {
     pin_state->value = val;
     return gpiod_set_raw_value(gpio_to_desc(pin_state->pin), val);
 }
 
-int read_value(struct PinState *pin_state)
+int read_value(PinState *pin_state)
 {
     int val = gpiod_get_raw_value(gpio_to_desc(pin_state->pin));
     pin_state->value = val;
@@ -141,7 +142,7 @@ unsigned long gpio_check_timer_sr(void)
     return mod_timer(&s_gpio_check_timer, jiffies + 125);
 }
 
-static ssize_t read_from_pin(struct PinState *pin_state, struct class_attribute *attr, char *buf)
+static ssize_t read_from_pin(PinState *pin_state, struct class_attribute *attr, char *buf)
 {
     if (pin_state->enabled)
     {
@@ -150,7 +151,7 @@ static ssize_t read_from_pin(struct PinState *pin_state, struct class_attribute 
     return sprintf(buf, "error : %s not configured...", attr->attr.name);
 }
 
-static ssize_t save_to_pin(struct PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
+static ssize_t save_to_pin(PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
 {
     if (!pin_state->enabled)
         return size;
@@ -159,7 +160,7 @@ static ssize_t save_to_pin(struct PinState *pin_state, struct class_attribute *a
     return size;
 }
 
-static ssize_t save_to_pin_or_var(struct PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
+static ssize_t save_to_pin_or_var(PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
 {
     if (!pin_state->enabled)
         return size;
@@ -171,7 +172,7 @@ static ssize_t save_to_pin_or_var(struct PinState *pin_state, struct class_attri
     return size;
 }
 
-static ssize_t read_from_var(struct PinState *pin_state, struct class_attribute *attr, char *buf)
+static ssize_t read_from_var(PinState *pin_state, struct class_attribute *attr, char *buf)
 {
     if (pin_state->enabled)
     {
@@ -180,7 +181,7 @@ static ssize_t read_from_var(struct PinState *pin_state, struct class_attribute 
     return sprintf(buf, "error : %s not configured...", attr->attr.name);
 }
 
-static ssize_t save_to_var(struct PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
+static ssize_t save_to_var(PinState *pin_state, struct class_attribute *attr, const char *buf, size_t size)
 {
     if (ant_overload_1_enabled)
         s_hasAntOverload = (int)(*buf - '0');
